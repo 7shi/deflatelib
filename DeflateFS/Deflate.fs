@@ -127,8 +127,8 @@ type Writer(sin:Stream) =
         let last = Math.Max(0, pos - maxbuf)
         let h = getHash buf pos
         let c = counts.[h]
-        let p1, p2 = if c < 16 then 0, c - 1 else c + 1, c + 16
-        let mutable i = p2
+        let p1 = Math.Max(0, c - 16)
+        let mutable i = c - 1
         while i >= p1 do
             let p = tables.[h, i &&& 15]
             if p < last then i <- 0 else
