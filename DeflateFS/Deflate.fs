@@ -71,7 +71,7 @@ type BitWriter(sout:Stream) =
             bit <- 0
             cur <- 0uy
     
-    member x.WriteLE (len:int) (b:int) =
+    member x.WriteBits (len:int) (b:int) =
         for i = 0 to len - 1 do
             x.WriteBit <| if (b &&& (1 <<< i)) = 0 then 0 else 1
     
@@ -82,24 +82,24 @@ type BitWriter(sout:Stream) =
 type FixedHuffmanWriter(bw:BitWriter) =
     member x.Write (b:int) =
         if b < 144 then
-            bw.WriteLE 8 rev.[b + 0b110000]
+            bw.WriteBits 8 rev.[b + 0b110000]
         elif b < 256 then
             bw.WriteBit 1
-            bw.WriteLE 8 rev.[b]
+            bw.WriteBits 8 rev.[b]
         elif b < 280 then
-            bw.WriteLE 7 rev.[(b - 256) <<< 1]
+            bw.WriteBits 7 rev.[(b - 256) <<< 1]
         elif b < 288 then
-            bw.WriteLE 8 rev.[b - 280 + 0b11000000]
+            bw.WriteBits 8 rev.[b - 280 + 0b11000000]
     
     member x.WriteLen (len:int) =
         let ll = litindex.[len - 3]
         x.Write ll
-        bw.WriteLE litexlens.[ll] (len - litlens.[ll])
+        bw.WriteBits litexlens.[ll] (len - litlens.[ll])
     
     member x.WriteDist (d:int) =
         let dl = distindex.[d - 1]
-        bw.WriteLE 5 rev.[dl <<< 3]
-        bw.WriteLE distexlens.[dl] (d - distlens.[dl])
+        bw.WriteBits 5 rev.[dl <<< 3]
+        bw.WriteBits distexlens.[dl] (d - distlens.[dl])
 
 let maxbuf = maxdist * 2
 let buflen = maxbuf + maxlen
@@ -152,7 +152,7 @@ type Writer(sin:Stream) =
     member x.Compress (sout:Stream) =
         use bw = new BitWriter(sout)
         bw.WriteBit 1
-        bw.WriteLE 2 1
+        bw.WriteBits 2 1
         let hw = new FixedHuffmanWriter(bw)
         let mutable p = 0
         while p < length do
