@@ -564,9 +564,8 @@ type Writer(t:int, sin:Stream) =
         hw.Write 256
 
 let GetCompressBytes (sin:Stream) =
-    let now = DateTime.Now
     let ms = new MemoryStream()
     let w = new Writer(2, sin)
     w.Compress ms
-    System.Diagnostics.Debug.WriteLine((DateTime.Now - now).ToString())
+    ms.Close()
     ms.ToArray()
