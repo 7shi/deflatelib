@@ -47,7 +47,7 @@ printfn "buf1 = buf3: %b" (CheckBytes buf1 buf3)
 
 let t3 = DateTime.Now
 let ms2 = new MemoryStream(buf1)
-let buf4, _ = Deflate.GetCompressBytes(ms2)
+let buf4 = Deflate.GetCompressBytes(ms2)
 ms2.Close()
 let t4 = DateTime.Now
 printfn "compress time: %s" ((t4 - t3).ToString())

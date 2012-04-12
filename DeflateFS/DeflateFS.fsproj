@@ -42,7 +42,6 @@
     <Reference Include="System.Numerics" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Crc.fs" />
     <Compile Include="Deflate.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

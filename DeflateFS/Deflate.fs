@@ -6,7 +6,6 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Linq
-open Crc
 
 let maxbuf = 32768
 let maxlen = 258
@@ -426,14 +425,10 @@ type Writer(t:int, sin:Stream) =
     let tables, counts =
         if t = 2 then Array2D.zeroCreate<int> 4096 16, Array.create 4096 0 else null, null
     let hash = if tables = null then [| for _ in 0..4095 -> new List<int>() |] else null
-    let mutable crc = ~~~0u
     
     let read pos len =
         let rlen = sin.Read(buf, pos, len)
         if rlen < len then length <- pos + rlen
-        for i = pos to pos + rlen - 1 do
-            let b = int(crc ^^^ (uint32 buf.[i])) &&& 0xff
-            crc <- (crc >>> 8) ^^^ crc32_table.[b]
         if hash <> null then
             for list in hash do list.Clear()
         else
@@ -476,8 +471,6 @@ type Writer(t:int, sin:Stream) =
                         maxl <- len
                 i <- i - 1
         maxp, maxl
-    
-    member x.Crc = ~~~crc
 
     member x.Compress (sout:Stream) =
         use bw = new BitWriter(sout)
@@ -576,4 +569,4 @@ let GetCompressBytes (sin:Stream) =
     let w = new Writer(2, sin)
     w.Compress ms
     System.Diagnostics.Debug.WriteLine((DateTime.Now - now).ToString())
-    ms.ToArray(), w.Crc
+    ms.ToArray()
