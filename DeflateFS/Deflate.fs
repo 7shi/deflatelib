@@ -43,6 +43,11 @@ let distlens =
             v <- v + 1
     distlens
 
+let sl = [| for i in 0..8191 ->
+             [| for j in 0..7 ->
+                 let v = i <<< j
+                 [| byte(v); byte(v >>> 8); byte(v >>> 16) |] |] |]
+
 let rev = [| for i in 0..255 ->
               let mutable b = 0
               for j = 0 to 7 do if (i &&& (1 <<< j)) <> 0 then b <- b + (128 >>> j)
@@ -80,8 +85,22 @@ type BitWriter(sout:Stream) =
             bit <- 0
     
     member x.WriteBits (len:int) (b:int) =
-        for i = 0 to len - 1 do
-            x.WriteBit ((b &&& (1 <<< i)) <> 0)
+        if len > 0 then
+            let s = sl.[b].[bit]
+            let v = cur ||| s.[0]
+            let pos = bit + len
+            if pos < 8 then
+                cur <- v
+                bit <- pos
+            else
+                x.WriteByte(v)
+                if pos < 16 then
+                    cur <- s.[1]
+                    bit <- pos - 8
+                else
+                    x.WriteByte(s.[1])
+                    cur <- s.[2]
+                    bit <- pos - 16
 
     member x.WriteFixedHuffman (b:int) =
         if b < 144 then
