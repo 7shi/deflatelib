@@ -49,21 +49,33 @@ let rev = [| for i in 0..255 ->
               b |]
 
 type BitWriter(sout:Stream) =
+    let buf = Array.zeroCreate<byte> 4096
+    let mutable bufp = 0
     let mutable cur = 0uy
     let mutable bit = 0
     
+    member x.WriteByte(b:byte) =
+        buf.[bufp] <- b
+        if bufp < 4095 then bufp <- bufp + 1 else
+            sout.Write(buf, 0, buf.Length)
+            bufp <- 0
+
     member x.Close() =
         if bit > 0 then
-            sout.WriteByte(cur)
+            x.WriteByte(cur)
             cur <- 0uy
             bit <- 0
+        if bufp > 0 then
+            sout.Write(buf, 0, bufp)
+            bufp <- 0
         sout.Flush()
     
     member x.WriteBit(b:bool) =
         if b then cur <- cur ||| (1uy <<< bit)
-        bit <- bit + 1
-        if bit = 8 then
-            sout.WriteByte(cur)
+        if bit < 7 then
+            bit <- bit + 1
+        else
+            x.WriteByte(cur)
             cur <- 0uy
             bit <- 0
     
