@@ -63,15 +63,14 @@ Public Class BitWriter
         End If
     End Sub
 
-    Public Sub WriteFixedHuffman(ByVal b%)
+    Public Sub WriteFixedHuffman(b%)
         If b < 144 Then
             WriteBits(8, rev(b + 48))
         ElseIf b < 256 Then
             WriteBit(True)
-            WriteBits(8, rev(b And 255))
+            WriteBits(8, rev(b))
         ElseIf b < 280 Then
-            b = b And 255
-            WriteBits(7, rev(b + b))
+            WriteBits(7, rev((b - 256) << 1))
         ElseIf b < 288 Then
             WriteBits(8, rev(b - 88))
         End If
@@ -87,7 +86,7 @@ Public Class BitWriter
     Public Sub WriteDist(d%)
         Dim dl%
         dl = distindex(d - 1)
-        WriteBits(5, rev(dl * 8))
+        WriteBits(5, rev(dl << 3))
         WriteBits(distexlens(dl), d - distlens(dl))
     End Sub
 End Class
