@@ -9,24 +9,38 @@ open System.IO
 let maxdist = 32768
 let maxlen = 258
 
-let getLitExLen v = if v < 265 || v = 285 then 0 else (v - 261) >>> 2
-let getDistExLen d = if d < 4 then 0 else (d - 2) >>> 1
+let litexlens =
+    [| for i in 0..285 -> if i < 265 || i = 285 then 0 else (i - 261) >>> 2 |]
+
+let litindex = Array.zeroCreate<int> (maxlen - 3 + 1)
 
 let litlens =
     let litlens = Array.zeroCreate<int> 286
     let mutable v = 3
     for i = 257 to 284 do
         litlens.[i] <- v
-        v <- v + (1 <<< (getLitExLen i))
+        let p2 = 1 <<< litexlens.[i]
+        for j = 1 to p2 do
+            litindex.[v - 3] <- i
+            v <- v + 1
     litlens.[285] <- maxlen
-    litlens.[257..285]
+    litindex.[maxlen - 3] <- 285
+    litlens
+
+let distexlens =
+    [| for i in 0..29 -> if i < 4 then 0 else (i - 2) >>> 1 |]
+
+let distindex = Array.zeroCreate<int> (maxdist - 1 + 1)
 
 let distlens =
     let distlens = Array.zeroCreate<int> 30
     let mutable v = 1
     for i = 0 to 29 do
         distlens.[i] <- v
-        v <- v + (1 <<< (getDistExLen i))
+        let p2 = 1 <<< distexlens.[i]
+        for j = 1 to p2 do
+            distindex.[v - 1] <- i
+            v <- v + 1
     distlens
 
 type BitWriter(sout:Stream) =
@@ -76,22 +90,14 @@ type FixedHuffmanWriter(bw:BitWriter) =
             bw.WriteBE 8 (b - 280 + 0b11000000)
     
     member x.WriteLen (len:int) =
-        if len < 3 || len > maxlen then
-            failwith <| sprintf "不正な長さ: %d" len
-        let mutable ll = 285
-        while len < litlens.[ll - 257] do
-            ll <- ll - 1
+        let ll = litindex.[len - 3]
         x.Write ll
-        bw.WriteLE (getLitExLen ll) (len - litlens.[ll - 257])
+        bw.WriteLE litexlens.[ll] (len - litlens.[ll])
     
     member x.WriteDist (d:int) =
-        if d < 1 || d > maxdist then
-            failwith <| sprintf "不正な距離: %d" d
-        let mutable dl = 29
-        while d < distlens.[dl] do
-            dl <- dl - 1
+        let dl = distindex.[d - 1]
         bw.WriteBE 5 dl
-        bw.WriteLE (getDistExLen dl) (d - distlens.[dl])
+        bw.WriteLE distexlens.[dl] (d - distlens.[dl])
 
 let maxbuf = maxdist * 2
 let buflen = maxbuf + maxlen
