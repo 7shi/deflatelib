@@ -43,6 +43,11 @@ let distlens =
             v <- v + 1
     distlens
 
+let rev = [| for i in 0..255 ->
+              let mutable b = 0
+              for j = 0 to 7 do if (i &&& (1 <<< j)) <> 0 then b <- b + (128 >>> j)
+              b |]
+
 type BitWriter(sout:Stream) =
     let mutable bit = 0
     let mutable cur = 0uy
@@ -70,10 +75,6 @@ type BitWriter(sout:Stream) =
         for i = 0 to len - 1 do
             x.WriteBit <| if (b &&& (1 <<< i)) = 0 then 0 else 1
     
-    member x.WriteBE (len:int) (b:int) =
-        for i = len - 1 downto 0 do
-            x.WriteBit <| if (b &&& (1 <<< i)) = 0 then 0 else 1
-    
     member x.WriteBytes(data:byte[]) =
         x.Skip()
         sout.Write(data, 0, data.Length)
@@ -81,13 +82,14 @@ type BitWriter(sout:Stream) =
 type FixedHuffmanWriter(bw:BitWriter) =
     member x.Write (b:int) =
         if b < 144 then
-            bw.WriteBE 8 (b + 0b110000)
+            bw.WriteLE 8 rev.[b + 0b110000]
         elif b < 256 then
-            bw.WriteBE 9 (b - 144 + 0b110010000)
+            bw.WriteBit 1
+            bw.WriteLE 8 rev.[b]
         elif b < 280 then
-            bw.WriteBE 7 (b - 256)
+            bw.WriteLE 7 rev.[(b - 256) <<< 1]
         elif b < 288 then
-            bw.WriteBE 8 (b - 280 + 0b11000000)
+            bw.WriteLE 8 rev.[b - 280 + 0b11000000]
     
     member x.WriteLen (len:int) =
         let ll = litindex.[len - 3]
@@ -96,7 +98,7 @@ type FixedHuffmanWriter(bw:BitWriter) =
     
     member x.WriteDist (d:int) =
         let dl = distindex.[d - 1]
-        bw.WriteBE 5 dl
+        bw.WriteLE 5 rev.[dl <<< 3]
         bw.WriteLE distexlens.[dl] (d - distlens.[dl])
 
 let maxbuf = maxdist * 2
