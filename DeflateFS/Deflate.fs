@@ -99,15 +99,16 @@ let buflen = maxbuf2 + maxlen
 let inline getHash (buf:byte[]) pos =
     ((int buf.[pos]) <<< 4) ^^^ ((int buf.[pos + 1]) <<< 2) ^^^ (int buf.[pos + 2])
 
-let inline addHash (tables:int[,]) (counts:int[]) (buf:byte[]) pos =
+let inline addHash (tables:int[,]) (counts:int[]) (buf:byte[]) bufstart pos =
     if buf.[pos] <> buf.[pos + 1] then
         let h = getHash buf pos
         let c = counts.[h]
-        tables.[h, c &&& 15] <- pos
+        tables.[h, c &&& 15] <- bufstart + pos
         counts.[h] <- c + 1
 
 type Writer(sin:Stream) =
     let mutable length = buflen
+    let mutable bufstart = 0
     let buf = Array.zeroCreate<byte> buflen
     let tables = Array2D.zeroCreate<int> 4096 16
     let counts = Array.zeroCreate<int> 4096
@@ -115,7 +116,6 @@ type Writer(sin:Stream) =
     let read pos len =
         let rlen = sin.Read(buf, pos, len)
         if rlen < len then length <- pos + rlen
-        Array.fill counts 0 counts.Length 0
     
     do
         read 0 buflen
@@ -130,7 +130,7 @@ type Writer(sin:Stream) =
         let p1 = Math.Max(0, c - 16)
         let mutable i = c - 1
         while i >= p1 do
-            let p = tables.[h, i &&& 15]
+            let p = tables.[h, i &&& 15] - bufstart
             if p < last then i <- 0 else
                 let mutable len = 0
                 while len < mlen && buf.[p + len] = buf.[pos + len] do
@@ -162,21 +162,20 @@ type Writer(sin:Stream) =
                 let maxp, maxl = search p
                 if maxp < 0 then
                     hw.Write(int b)
-                    addHash tables counts buf p
+                    addHash tables counts buf bufstart p
                     p <- p + 1
                 else
                     hw.WriteLen maxl
                     hw.WriteDist (p - maxp)
                     for i = p to p + maxl - 1 do
-                        addHash tables counts buf i
+                        addHash tables counts buf bufstart i
                     p <- p + maxl
             if p > maxbuf2 then
                 Array.Copy(buf, maxbuf, buf, 0, maxbuf + maxlen)
                 if length < buflen then length <- length - maxbuf else
                     read (maxbuf + maxlen) maxbuf
                 p <- p - maxbuf
-                for i = 0 to p - 1 do
-                    addHash tables counts buf i
+                bufstart <- bufstart + maxbuf
         hw.Write 256
 
 let GetCompressBytes (sin:Stream) =
