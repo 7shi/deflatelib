@@ -63,8 +63,8 @@ type BitWriter(sout:Stream) =
             x.Skip()
             sout.Flush()
     
-    member x.WriteBit(b:int) =
-        cur <- cur ||| ((byte b) <<< bit)
+    member x.WriteBit(b:bool) =
+        if b then cur <- cur ||| (1uy <<< bit)
         bit <- bit + 1
         if bit = 8 then
             sout.WriteByte(cur)
@@ -73,7 +73,7 @@ type BitWriter(sout:Stream) =
     
     member x.WriteBits (len:int) (b:int) =
         for i = 0 to len - 1 do
-            x.WriteBit <| if (b &&& (1 <<< i)) = 0 then 0 else 1
+            x.WriteBit ((b &&& (1 <<< i)) <> 0)
     
     member x.WriteBytes(data:byte[]) =
         x.Skip()
@@ -84,7 +84,7 @@ type FixedHuffmanWriter(bw:BitWriter) =
         if b < 144 then
             bw.WriteBits 8 rev.[b + 0b110000]
         elif b < 256 then
-            bw.WriteBit 1
+            bw.WriteBit true
             bw.WriteBits 8 rev.[b]
         elif b < 280 then
             bw.WriteBits 7 rev.[(b - 256) <<< 1]
@@ -151,7 +151,7 @@ type Writer(sin:Stream) =
 
     member x.Compress (sout:Stream) =
         use bw = new BitWriter(sout)
-        bw.WriteBit 1
+        bw.WriteBit true
         bw.WriteBits 2 1
         let hw = new FixedHuffmanWriter(bw)
         let mutable p = 0
