@@ -74,10 +74,6 @@ type BitWriter(sout:Stream) =
     member x.WriteBits (len:int) (b:int) =
         for i = 0 to len - 1 do
             x.WriteBit ((b &&& (1 <<< i)) <> 0)
-    
-    member x.WriteBytes(data:byte[]) =
-        x.Skip()
-        sout.Write(data, 0, data.Length)
 
     member x.WriteFixedHuffman (b:int) =
         if b < 144 then
