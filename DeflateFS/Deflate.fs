@@ -6,7 +6,7 @@ open System
 open System.Collections.Generic
 open System.IO
 
-let maxbuf = 32768
+let maxdist = 32768
 let maxlen = 258
 
 let getLitExLen v = if v < 265 || v = 285 then 0 else (v - 261) >>> 2
@@ -85,7 +85,7 @@ type FixedHuffmanWriter(bw:BitWriter) =
         bw.WriteLE (getLitExLen ll) (len - litlens.[ll - 257])
     
     member x.WriteDist (d:int) =
-        if d < 1 || d > maxbuf then
+        if d < 1 || d > maxdist then
             failwith <| sprintf "不正な距離: %d" d
         let mutable dl = 29
         while d < distlens.[dl] do
@@ -93,8 +93,8 @@ type FixedHuffmanWriter(bw:BitWriter) =
         bw.WriteBE 5 dl
         bw.WriteLE (getDistExLen dl) (d - distlens.[dl])
 
-let maxbuf2 = maxbuf * 2
-let buflen = maxbuf2 + maxlen
+let maxbuf = maxdist * 2
+let buflen = maxbuf + maxlen
 
 let inline getHash (buf:byte[]) pos =
     ((int buf.[pos]) <<< 4) ^^^ ((int buf.[pos + 1]) <<< 2) ^^^ (int buf.[pos + 2])
@@ -124,7 +124,7 @@ type Writer(sin:Stream) =
         let mutable maxp = -1
         let mutable maxl = 2
         let mlen = Math.Min(maxlen, length - pos)
-        let last = Math.Max(0, pos - maxbuf)
+        let last = Math.Max(0, pos - maxdist)
         let h = getHash buf pos
         let c = counts.[h]
         let p1 = Math.Max(0, c - 16)
@@ -170,12 +170,12 @@ type Writer(sin:Stream) =
                     for i = p to p + maxl - 1 do
                         addHash tables counts buf bufstart i
                     p <- p + maxl
-            if p > maxbuf2 then
-                Array.Copy(buf, maxbuf, buf, 0, maxbuf + maxlen)
-                if length < buflen then length <- length - maxbuf else
-                    read (maxbuf + maxlen) maxbuf
-                p <- p - maxbuf
-                bufstart <- bufstart + maxbuf
+            if p > maxbuf then
+                Array.Copy(buf, maxdist, buf, 0, maxdist + maxlen)
+                if length < buflen then length <- length - maxdist else
+                    read (maxdist + maxlen) maxdist
+                p <- p - maxdist
+                bufstart <- bufstart + maxdist
         hw.Write 256
 
 let GetCompressBytes (sin:Stream) =
