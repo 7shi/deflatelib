@@ -52,16 +52,12 @@ type BitWriter(sout:Stream) =
     let mutable bit = 0
     let mutable cur = 0uy
     
-    member x.Skip() =
+    member x.Close() =
         if bit > 0 then
             sout.WriteByte(cur)
             bit <- 0
             cur <- 0uy
-    
-    interface IDisposable with
-        member x.Dispose() =
-            x.Skip()
-            sout.Flush()
+        sout.Flush()
     
     member x.WriteBit(b:bool) =
         if b then cur <- cur ||| (1uy <<< bit)
@@ -145,7 +141,7 @@ type Writer(sin:Stream) =
         maxp, maxl
 
     member x.Compress (sout:Stream) =
-        use bw = new BitWriter(sout)
+        let bw = new BitWriter(sout)
         bw.WriteBit true
         bw.WriteBits 2 1
         let mutable p = 0
@@ -179,6 +175,7 @@ type Writer(sin:Stream) =
                 p <- p - maxdist
                 bufstart <- bufstart + maxdist
         bw.WriteFixedHuffman 256
+        bw.Close()
 
 let GetCompressBytes (sin:Stream) =
     let ms = new MemoryStream()
