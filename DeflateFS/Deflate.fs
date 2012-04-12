@@ -79,27 +79,26 @@ type BitWriter(sout:Stream) =
         x.Skip()
         sout.Write(data, 0, data.Length)
 
-type FixedHuffmanWriter(bw:BitWriter) =
-    member x.Write (b:int) =
+    member x.WriteFixedHuffman (b:int) =
         if b < 144 then
-            bw.WriteBits 8 rev.[b + 0b110000]
+            x.WriteBits 8 rev.[b + 0b110000]
         elif b < 256 then
-            bw.WriteBit true
-            bw.WriteBits 8 rev.[b]
+            x.WriteBit true
+            x.WriteBits 8 rev.[b]
         elif b < 280 then
-            bw.WriteBits 7 rev.[(b - 256) <<< 1]
+            x.WriteBits 7 rev.[(b - 256) <<< 1]
         elif b < 288 then
-            bw.WriteBits 8 rev.[b - 280 + 0b11000000]
+            x.WriteBits 8 rev.[b - 280 + 0b11000000]
     
     member x.WriteLen (len:int) =
         let ll = litindex.[len - 3]
-        x.Write ll
-        bw.WriteBits litexlens.[ll] (len - litlens.[ll])
+        x.WriteFixedHuffman ll
+        x.WriteBits litexlens.[ll] (len - litlens.[ll])
     
     member x.WriteDist (d:int) =
         let dl = distindex.[d - 1]
-        bw.WriteBits 5 rev.[dl <<< 3]
-        bw.WriteBits distexlens.[dl] (d - distlens.[dl])
+        x.WriteBits 5 rev.[dl <<< 3]
+        x.WriteBits distexlens.[dl] (d - distlens.[dl])
 
 let maxbuf = maxdist * 2
 let buflen = maxbuf + maxlen
@@ -153,7 +152,6 @@ type Writer(sin:Stream) =
         use bw = new BitWriter(sout)
         bw.WriteBit true
         bw.WriteBits 2 1
-        let hw = new FixedHuffmanWriter(bw)
         let mutable p = 0
         while p < length do
             let b = buf.[p]
@@ -162,19 +160,19 @@ type Writer(sin:Stream) =
                 let mlen = Math.Min(maxlen + 1, length - p)
                 while len < mlen && b = buf.[p + len] do
                     len <- len + 1
-                hw.Write(int b)
-                hw.WriteLen(len - 1)
-                hw.WriteDist 1
+                bw.WriteFixedHuffman(int b)
+                bw.WriteLen(len - 1)
+                bw.WriteDist 1
                 p <- p + len
             else
                 let maxp, maxl = search p
                 if maxp < 0 then
-                    hw.Write(int b)
+                    bw.WriteFixedHuffman(int b)
                     addHash tables counts buf bufstart p
                     p <- p + 1
                 else
-                    hw.WriteLen maxl
-                    hw.WriteDist (p - maxp)
+                    bw.WriteLen maxl
+                    bw.WriteDist (p - maxp)
                     for i = p to p + maxl - 1 do
                         addHash tables counts buf bufstart i
                     p <- p + maxl
@@ -184,7 +182,7 @@ type Writer(sin:Stream) =
                     read (maxdist + maxlen) maxdist
                 p <- p - maxdist
                 bufstart <- bufstart + maxdist
-        hw.Write 256
+        bw.WriteFixedHuffman 256
 
 let GetCompressBytes (sin:Stream) =
     let ms = new MemoryStream()
