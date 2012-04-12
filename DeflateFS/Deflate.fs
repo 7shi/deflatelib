@@ -99,31 +99,23 @@ let buflen = maxbuf2 + maxlen
 let inline getHash (buf:byte[]) pos =
     ((int buf.[pos]) <<< 4) ^^^ ((int buf.[pos + 1]) <<< 2) ^^^ (int buf.[pos + 2])
 
-let inline addHash (hash:List<int>[]) (buf:byte[]) pos =
-    if buf.[pos] <> buf.[pos + 1] then
-        hash.[getHash buf pos].Add pos
-
-let inline addHash2 (tables:int[,]) (counts:int[]) (buf:byte[]) pos =
+let inline addHash (tables:int[,]) (counts:int[]) (buf:byte[]) pos =
     if buf.[pos] <> buf.[pos + 1] then
         let h = getHash buf pos
         let c = counts.[h]
         tables.[h, c &&& 15] <- pos
         counts.[h] <- c + 1
 
-type Writer(t:int, sin:Stream) =
+type Writer(sin:Stream) =
     let mutable length = buflen
     let buf = Array.zeroCreate<byte> buflen
-    let tables, counts =
-        if t = 2 then Array2D.zeroCreate<int> 4096 16, Array.create 4096 0 else null, null
-    let hash = if tables = null then [| for _ in 0..4095 -> new List<int>() |] else null
+    let tables = Array2D.zeroCreate<int> 4096 16
+    let counts = Array.zeroCreate<int> 4096
     
     let read pos len =
         let rlen = sin.Read(buf, pos, len)
         if rlen < len then length <- pos + rlen
-        if hash <> null then
-            for list in hash do list.Clear()
-        else
-            Array.fill counts 0 counts.Length 0
+        Array.fill counts 0 counts.Length 0
     
     do
         read 0 buflen
@@ -134,33 +126,19 @@ type Writer(t:int, sin:Stream) =
         let mlen = Math.Min(maxlen, length - pos)
         let last = Math.Max(0, pos - maxbuf)
         let h = getHash buf pos
-        if hash <> null then
-            let list = hash.[h]
-            let mutable i = list.Count - 1
-            while i >= 0 do
-                let p = list.[i]
-                if p < last then i <- 0 else
-                    let mutable len = 0
-                    while len < mlen && buf.[p + len] = buf.[pos + len] do
-                        len <- len + 1
-                    if len > maxl then
-                        maxp <- p
-                        maxl <- len
-                i <- i - 1
-        else
-            let c = counts.[h]
-            let p1, p2 = if c < 16 then 0, c - 1 else c + 1, c + 16
-            let mutable i = p2
-            while i >= p1 do
-                let p = tables.[h, i &&& 15]
-                if p < last then i <- 0 else
-                    let mutable len = 0
-                    while len < mlen && buf.[p + len] = buf.[pos + len] do
-                        len <- len + 1
-                    if len > maxl then
-                        maxp <- p
-                        maxl <- len
-                i <- i - 1
+        let c = counts.[h]
+        let p1, p2 = if c < 16 then 0, c - 1 else c + 1, c + 16
+        let mutable i = p2
+        while i >= p1 do
+            let p = tables.[h, i &&& 15]
+            if p < last then i <- 0 else
+                let mutable len = 0
+                while len < mlen && buf.[p + len] = buf.[pos + len] do
+                    len <- len + 1
+                if len > maxl then
+                    maxp <- p
+                    maxl <- len
+            i <- i - 1
         maxp, maxl
 
     member x.Compress (sout:Stream) =
@@ -169,94 +147,41 @@ type Writer(t:int, sin:Stream) =
         bw.WriteLE 2 1
         let hw = new FixedHuffmanWriter(bw)
         let mutable p = 0
-        match t with
-        | 2 ->
-            while p < length do
-                let b = buf.[p]
-                if p < length - 4 && b = buf.[p + 1] && b = buf.[p + 2] && b = buf.[p + 3] then
-                    let mutable len = 4
-                    let mlen = Math.Min(maxlen + 1, length - p)
-                    while len < mlen && b = buf.[p + len] do
-                        len <- len + 1
-                    hw.Write(int b)
-                    hw.WriteLen(len - 1)
-                    hw.WriteDist 1
-                    p <- p + len
-                else
-                    let maxp, maxl = search p
-                    if maxp < 0 then
-                        hw.Write(int b)
-                        addHash2 tables counts buf p
-                        p <- p + 1
-                    else
-                        hw.WriteLen maxl
-                        hw.WriteDist (p - maxp)
-                        for i = p to p + maxl - 1 do
-                            addHash2 tables counts buf i
-                        p <- p + maxl
-                if p > maxbuf2 then
-                    Array.Copy(buf, maxbuf, buf, 0, maxbuf + maxlen)
-                    if length < buflen then length <- length - maxbuf else
-                        read (maxbuf + maxlen) maxbuf
-                    p <- p - maxbuf
-                    for i = 0 to p - 1 do
-                        addHash2 tables counts buf i
-        | 1 ->
-            while p < length do
-                let b = buf.[p]
-                if p < length - 4 && b = buf.[p + 1] && b = buf.[p + 2] && b = buf.[p + 3] then
-                    let mutable len = 4
-                    let mlen = Math.Min(maxlen + 1, length - p)
-                    while len < mlen && b = buf.[p + len] do
-                        len <- len + 1
-                    hw.Write(int b)
-                    hw.WriteLen(len - 1)
-                    hw.WriteDist 1
-                    p <- p + len
-                else
-                    let maxp, maxl = search p
-                    if maxp < 0 then
-                        hw.Write(int b)
-                        addHash hash buf p
-                        p <- p + 1
-                    else
-                        hw.WriteLen maxl
-                        hw.WriteDist (p - maxp)
-                        for i = p to p + maxl - 1 do
-                            addHash hash buf i
-                        p <- p + maxl
-                if p > maxbuf2 then
-                    Array.Copy(buf, maxbuf, buf, 0, maxbuf + maxlen)
-                    if length < buflen then length <- length - maxbuf else
-                        read (maxbuf + maxlen) maxbuf
-                    p <- p - maxbuf
-                    for i = 0 to p - 1 do
-                        addHash hash buf i
-        | _ ->
-            while p < length do
+        while p < length do
+            let b = buf.[p]
+            if p < length - 4 && b = buf.[p + 1] && b = buf.[p + 2] && b = buf.[p + 3] then
+                let mutable len = 4
+                let mlen = Math.Min(maxlen + 1, length - p)
+                while len < mlen && b = buf.[p + len] do
+                    len <- len + 1
+                hw.Write(int b)
+                hw.WriteLen(len - 1)
+                hw.WriteDist 1
+                p <- p + len
+            else
                 let maxp, maxl = search p
                 if maxp < 0 then
-                    hw.Write(int buf.[p])
-                    hash.[getHash buf p].Add p
+                    hw.Write(int b)
+                    addHash tables counts buf p
                     p <- p + 1
                 else
                     hw.WriteLen maxl
                     hw.WriteDist (p - maxp)
                     for i = p to p + maxl - 1 do
-                        hash.[getHash buf i].Add i
+                        addHash tables counts buf i
                     p <- p + maxl
-                if p > maxbuf2 then
-                    Array.Copy(buf, maxbuf, buf, 0, maxbuf + maxlen)
-                    if length < buflen then length <- length - maxbuf else
-                        read (maxbuf + maxlen) maxbuf
-                    p <- p - maxbuf
-                    for i = 0 to p - 1 do
-                        hash.[getHash buf i].Add i
+            if p > maxbuf2 then
+                Array.Copy(buf, maxbuf, buf, 0, maxbuf + maxlen)
+                if length < buflen then length <- length - maxbuf else
+                    read (maxbuf + maxlen) maxbuf
+                p <- p - maxbuf
+                for i = 0 to p - 1 do
+                    addHash tables counts buf i
         hw.Write 256
 
 let GetCompressBytes (sin:Stream) =
     let ms = new MemoryStream()
-    let w = new Writer(2, sin)
+    let w = new Writer(sin)
     w.Compress ms
     ms.Close()
     ms.ToArray()
