@@ -2,7 +2,7 @@
 Imports System.IO.Compression
 
 Module Module1
-    Function CheckBytes(data1 As Byte(), data2 As Byte())
+    Function CheckBytes(data1 As Byte(), data2 As Byte()) As Boolean
         If data1.Length <> data2.Length Then Return False
         For i = 0 To data1.Length - 1
             If data1(i) <> data2(i) Then Return False
