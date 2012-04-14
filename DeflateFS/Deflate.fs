@@ -208,9 +208,12 @@ type Writer(sin:Stream) =
         bw.WriteFixedHuffman 256
         bw.Close()
 
+let Compress (sin:Stream) (sout:Stream) =
+    let w = new Writer(sin)
+    w.Compress sout
+
 let GetCompressBytes (sin:Stream) =
     let ms = new MemoryStream()
-    let w = new Writer(sin)
-    w.Compress ms
+    Compress sin ms
     ms.Close()
     ms.ToArray()

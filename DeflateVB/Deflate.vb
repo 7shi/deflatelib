@@ -72,11 +72,15 @@ Module Deflate
         Next I
     End Sub
 
+    Public Sub Compress(sin As Stream, sout As Stream)
+        Dim w = New DeflateWriter
+        w.Compress(sin, sout)
+    End Sub
+
     Public Function GetCompressBytes(sin As Stream) As Byte()
         If rev(255) = 0 Then Init()
         Dim ms = New MemoryStream
-        Dim w = New DeflateWriter
-        w.Compress(sin, ms)
+        Compress(sin, ms)
         ms.Close()
         GetCompressBytes = ms.ToArray()
     End Function

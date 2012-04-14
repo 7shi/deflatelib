@@ -80,11 +80,16 @@ namespace DeflateCS
             }
         }
 
+        public static void Compress(Stream sin, Stream sout)
+        {
+            var w = new DeflateWriter();
+            w.Compress(sin, sout);
+        }
+
         public static byte[] GetCompressBytes(Stream sin)
         {
             var ms = new MemoryStream();
-            var w = new DeflateWriter();
-            w.Compress(sin, ms);
+            Compress(sin, ms);
             ms.Close();
             return ms.ToArray();
         }

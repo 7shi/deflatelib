@@ -27,32 +27,53 @@ let GetDecompress (buf:byte[]) =
     ms1.Close()
     ms2.ToArray()
 
-let buf1 = File.ReadAllBytes(@"C:\Ruby\bin\ruby.exe")
-printfn "buf1.Length: %d" buf1.Length
+let target_in = @"C:\Ruby\bin\ruby.exe";
+let target_out = @"C:\fs-ruby.exe.deflate";
 
-let t1 = DateTime.Now
-let ms1 = new MemoryStream()
-let ds1 = new DeflateStream(ms1, CompressionMode.Compress)
-ds1.Write(buf1, 0, buf1.Length)
-ds1.Close()
-ms1.Close()
-let buf2 = ms1.ToArray()
-let t2 = DateTime.Now
-printfn "compress time: %s" ((t2 - t1).ToString())
-printfn "buf2.Length: %d (DeflateStream)" buf2.Length
+printfn "[target file]"
+printfn "Length: %d" ((new FileInfo(target_in)).Length)
 
-let buf3 = GetDecompress buf2
-printfn "buf3.Length: %d" buf3.Length
-printfn "buf1 = buf3: %b" (CheckBytes buf1 buf3)
+printfn ""
+printfn "[myimpl (file I/O)]"
+do
+    let ts =
+        use sin = new FileStream(target_in, FileMode.Open)
+        use sout = new FileStream(target_out, FileMode.Create)
+        let t1 = DateTime.Now
+        Deflate.Compress sin sout
+        DateTime.Now - t1
+    let buf2 = File.ReadAllBytes(target_out)
+    printfn "Length: %d, Time: %s" buf2.Length (ts.ToString())
 
-let t3 = DateTime.Now
-let ms2 = new MemoryStream(buf1)
-let buf4 = Deflate.GetCompressBytes(ms2)
-ms2.Close()
-let t4 = DateTime.Now
-printfn "compress time: %s" ((t4 - t3).ToString())
-printfn "buf4.Length: %d (original)" buf4.Length
+let buf1 = File.ReadAllBytes(target_in)
 
-let buf5 = GetDecompress buf4
-printfn "buf5.Length: %d" buf5.Length
-printfn "buf1 = buf5: %b" (CheckBytes buf1 buf5)
+let loop n (f:unit -> TimeSpan * byte[]) =
+    let mutable times = 0.0
+    for i = 1 to n do
+        let ts, buf2 = f()
+        let buf3 = GetDecompress buf2
+        let check = if CheckBytes buf1 buf3 then "OK" else "NG"
+        printfn "[%d:%s] Length: %d, Time: %s" i check buf2.Length (ts.ToString())
+        times <- times + (ts.TotalSeconds)
+    if n > 1 then printfn "[1 - %d] Time: %s" n (TimeSpan.FromSeconds(times / (float n)).ToString())
+
+printfn ""
+printfn "[myimpl (on memory)]"
+loop 5 <| fun() ->
+    let t1 = DateTime.Now
+    let ms = new MemoryStream(buf1)
+    let buf2 = Deflate.GetCompressBytes(ms)
+    ms.Close()
+    DateTime.Now - t1, buf2
+
+printfn ""
+printfn "[DeflateStream (on memory)]"
+loop 5 <| fun() ->
+    let t1 = DateTime.Now
+    let ms = new MemoryStream()
+    let ds = new DeflateStream(ms, CompressionMode.Compress)
+    ds.Write(buf1, 0, buf1.Length)
+    ds.Close()
+    ms.Close()
+    let buf2 = ms.ToArray()
+    DateTime.Now - t1, buf2

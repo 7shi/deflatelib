@@ -30,37 +30,75 @@ namespace DeflateCS
             return ms2.ToArray();
         }
 
+        static byte[] buf1;
+
+        static void TestLoop(int n, Func<Tuple<TimeSpan, byte[]>> f)
+        {
+            double times = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                var result = f();
+                var ts = result.Item1;
+                var buf2 = result.Item2;
+                var buf3 = GetDecompress(buf2);
+                var check = CheckBytes(buf1, buf3) ? "OK" : "NG";
+                Console.WriteLine("[{0}:{1}] Length: {2}, Time: {3}", i, check, buf2.Length, ts);
+                times += ts.TotalSeconds;
+            }
+            if (n > 1)
+                Console.WriteLine("[1 - {0}] Times: {1}", n, TimeSpan.FromSeconds(times / n));
+        }
+
         static void Main(string[] args)
         {
-            var buf1 = File.ReadAllBytes(@"C:\Ruby\bin\ruby.exe");
-            Console.WriteLine("buf1.Length: {0}", buf1.Length);
+            const string target_in = @"C:\Ruby\bin\ruby.exe";
+            const string target_out = @"C:\cs-ruby.exe.deflate";
 
-            var t1 = DateTime.Now;
-            var ms1 = new MemoryStream();
-            var ds1 = new DeflateStream(ms1, CompressionMode.Compress);
-            ds1.Write(buf1, 0, buf1.Length);
-            ds1.Close();
-            ms1.Close();
-            var buf2 = ms1.ToArray();
-            var t2 = DateTime.Now;
-            Console.WriteLine("compress time: {0}", t2 - t1);
-            Console.WriteLine("buf2.Length: {0} (DeflateStream)", buf2.Length);
+            Console.WriteLine("[target file]");
+            Console.WriteLine("Length: {0}", new FileInfo(target_in).Length);
 
-            var buf3 = GetDecompress(buf2);
-            Console.WriteLine("buf3.Length: {0}", buf3.Length);
-            Console.WriteLine("buf1 = buf3: {0}", CheckBytes(buf1, buf3));
+            Console.WriteLine("");
+            Console.WriteLine("[myimpl (file I/O)]");
 
-            var t3 = DateTime.Now;
-            var ms2 = new MemoryStream(buf1);
-            var buf4 = Deflate.GetCompressBytes(ms2);
-            ms2.Close();
-            var t4 = DateTime.Now;
-            Console.WriteLine("compress time: {0}", t4 - t3);
-            Console.WriteLine("buf4.Length: {0} (original)", buf4.Length);
+            {
+                TimeSpan ts;
+                using (var sin = new FileStream(target_in, FileMode.Open))
+                using (var sout = new FileStream(target_out, FileMode.Create))
+                {
+                    var t1 = DateTime.Now;
+                    Deflate.Compress(sin, sout);
+                    ts = DateTime.Now - t1;
+                }
+                var buf2 = File.ReadAllBytes(target_out);
+                Console.WriteLine("Length: {0}, Time: {1}", buf2.Length, ts);
+            }
 
-            var buf5 = GetDecompress(buf4);
-            Console.WriteLine("buf5.Length: {0}", buf5.Length);
-            Console.WriteLine("buf1 = buf5: {0}", CheckBytes(buf1, buf5));
+            buf1 = File.ReadAllBytes(target_in);
+
+            Console.WriteLine("");
+            Console.WriteLine("[myimpl (on memory)]");
+            TestLoop(5, () =>
+            {
+                var t1 = DateTime.Now;
+                var ms = new MemoryStream(buf1);
+                var buf2 = Deflate.GetCompressBytes(ms);
+                ms.Close();
+                return Tuple.Create(DateTime.Now - t1, buf2);
+            });
+
+            Console.WriteLine("");
+            Console.WriteLine("[DeflateStream (on memory)]");
+            TestLoop(5, () =>
+            {
+                var t1 = DateTime.Now;
+                var ms = new MemoryStream();
+                var ds = new DeflateStream(ms, CompressionMode.Compress);
+                ds.Write(buf1, 0, buf1.Length);
+                ds.Close();
+                ms.Close();
+                var buf2 = ms.ToArray();
+                return Tuple.Create(DateTime.Now - t1, buf2);
+            });
         }
     }
 }
