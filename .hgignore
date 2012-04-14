@@ -1,4 +1,6 @@
 syntax: glob
 *.suo
+*.sdf
 bin/
 obj/
+ipch/
