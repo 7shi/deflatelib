@@ -1,0 +1,17 @@
+﻿const string target_in = @"C:\Ruby\bin\ruby.exe";
+const string target_out = @"C:\adm-ruby.exe.deflate";
+
+var sin = new FileStream;
+if (!sin.OpenRead(target_in)) ExitProcess(1);
+
+var sout = new FileStream;
+if (!sout.OpenWrite(target_out))
+{
+    sin.Close();
+    ExitProcess(1);
+}
+
+var t1 = DateTime.Now;
+Deflate.Compress(sin, sout);
+var t2 = DateTime.Now;
+printfln("compress time: %s", t2.Sub(t1).ToString());

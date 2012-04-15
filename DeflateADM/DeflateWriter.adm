@@ -1,0 +1,125 @@
+﻿// public domain
+
+class DeflateWriter
+{
+    const int maxbuf = Deflate.maxdist * 2;
+    const int buflen = maxbuf + Deflate.maxlen;
+
+    int bufstart, length;
+    var buf = new byte[buflen];
+    var tables = new int [4096 * 16];
+    var current = new int [4096];
+
+    function Read(sin : FileStream, pos : int, len : int)
+    {
+        int rlen=sin.ReadWithLength(addrof buf[pos], len);
+        if (rlen < len)
+            length = pos + rlen;
+    }
+
+    function GetHash(b1 : int, b2 : int, b3 : int) : int
+    {
+        return (b1 << 4) ^ (b2 << 2) ^ b3;
+    }
+
+    function AddHash(pos : int)
+    {
+        byte b1 = buf[pos], b2 = buf[pos + 1];
+        if (b1 != b2)
+        {
+            int h = GetHash(b1, b2, buf[pos + 2]);
+            int c = current[h];
+            tables[h * 16 + (c & 15)] = bufstart + pos;
+            current[h] = c + 1;
+        }
+    }
+
+    function Search(pos : int, rp : int*, rl : int*)
+    {
+        int maxp =  - 1, maxl = 2;
+        int mlen = Math.Min(Deflate.maxlen, length - pos);
+        int last = Math.Max(0, pos - Deflate.maxdist);
+        int h = GetHash(buf[pos], buf[pos + 1], buf[pos + 2]);
+        int c = current[h];
+        int p1 = Math.Max(0, c - 16);
+        int hh = h * 16;
+        for (int i = c - 1; i >= p1; i--)
+        {
+            int p = tables[hh + (i & 15)] - bufstart;
+            if (p < last)
+                break;
+            else
+            {
+                int len = 0;
+                while (len < mlen && buf[p + len] == buf[pos + len])
+                    len++;
+                if (len > maxl)
+                {
+                    maxp = p;
+                    maxl = len;
+                }
+            }
+        }
+        rp[0] = maxp;
+        rl[0] = maxl;
+    }
+
+    function Compress(sin : FileStream, sout : FileStream)
+    {
+        length = buflen;
+        bufstart = 0;
+        memset(current, 0, current.Length);
+        Read(sin, 0, buflen);
+
+        var bw = BitWriter.Create(sout);
+        bw.WriteBit(true);
+        bw.WriteBits(2, 1);
+        int p = 0;
+        while (p < length)
+        {
+            byte b = buf[p];
+            if (p < length - 4 && b == buf[p + 1] && b == buf[p + 2] && b == buf[p + 3])
+            {
+                int len = 4;
+                int mlen = Math.Min(Deflate.maxlen + 1, length - p);
+                while (len < mlen && b == buf[p + len])
+                    len++;
+                bw.WriteFixedHuffman(b);
+                bw.WriteLen(len - 1);
+                bw.WriteDist(1);
+                p += len;
+            }
+            else
+            {
+                int maxp, maxl;
+                Search(p, addrof maxp, addrof maxl);
+                if (maxp < 0)
+                {
+                    bw.WriteFixedHuffman(b);
+                    AddHash(p);
+                    p++;
+                }
+                else
+                {
+                    bw.WriteLen(maxl);
+                    bw.WriteDist(p - maxp);
+                    for (int i = p; i < p + maxl; i++)
+                        AddHash(i);
+                    p += maxl;
+                }
+            }
+            if (p > maxbuf)
+            {
+                memcpy(buf, addrof buf[Deflate.maxdist], Deflate.maxdist + Deflate.maxlen);
+                if (length < buflen)
+                    length -= Deflate.maxdist;
+                else
+                    Read(sin, Deflate.maxdist + Deflate.maxlen, Deflate.maxdist);
+                p -= Deflate.maxdist;
+                bufstart += Deflate.maxdist;
+            }
+        }
+        bw.WriteFixedHuffman(256);
+        bw.Close();
+    }
+}
