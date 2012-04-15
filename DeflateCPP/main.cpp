@@ -5,7 +5,7 @@ int main(int argc, char* argv[])
 {
     FILE *fin = fopen("C:\\Ruby\\bin\\ruby.exe", "rb");
     if (fin == NULL) return 1;
-    FILE *fout = fopen("C:\\ruby.exe.deflate", "wb");
+    FILE *fout = fopen("C:\\cpp-ruby.exe.deflate", "wb");
     if (fout == NULL)
     {
         fclose(fin);
